@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Voronoi diagram of a sunflower seed pattern using the golden ratio</title>
+	
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+	
+    <script type="text/javascript" src="assets/paper.js"></script>
+    <script type="text/javascript" src="assets/rhill-voronoi-core.js"></script>
+    <script type="text/javascript" src="assets/base64.js"></script>
+    <script src="https://code.jquery.com/jquery-1.12.4.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+	
+    <script type="text/paperscript" canvas="canvas">
+        var voronoi = new Voronoi();        
+        var bbox, diagram;
+        var size = 1000;
+	var selected = false;
+        var oldSize = 1000;
+        var spotColor = new Color('black');
+        var seedScale = 20.0; // zoom factor for the pattern
+	var spacing = 0.80; // space between cells, or thickness of walls
+	var seeds = 500; // number of Voronoi cells, or sunflower seeds
+	var angle = 222.49223595; // golden angle
+	
+	// other angles to try:
+	// 360 / Math.sqrt(2)
+	// 360 / Math.cbrt(2)
+	// 360 / Math.PI
+	// 360 / Math.E (e = 2.718)
+	
+	
+	var sites = generateSeeds(seeds);
+	
+	var margin = 20;
+        bbox = {
+           xl: margin,
+           xr: size - margin,
+           yt: margin,
+           yb: size - margin
+        }; 
+	
+	$("#seedvalue").text(seeds);
+	$("#scalevalue").text(seedScale);
+	$("#spacingvalue").text(spacing);
+	
+        renderDiagram();
+
+        function renderDiagram() {
+            project.activeLayer.removeChildren();
+            var diagram = voronoi.compute(sites, bbox);	    
+            if (diagram) {
+                for (var i = 0, l = sites.length; i < l; i++) {
+                    var cell = diagram.cells[sites[i].voronoiId];
+                    if (cell) {
+                        var halfedges = cell.halfedges,
+                            length = halfedges.length;
+                        if (length > 2) {
+                            var points = [];
+                            for (var j = 0; j < length; j++) {
+                                v = halfedges[j].getEndpoint();
+                                points.push(new Point(v));
+                            }
+                            createPath(points, sites[i]);
+                        }
+                    }
+                }
+            }
+	    // frame the diagram for easier aligning when importing it
+	    var corner = new Point(margin/2, margin/2);
+	    var dimensions = new Size(size - margin, size - margin);
+	    var myRectangle = new Path.Rectangle(corner, dimensions);
+	    myRectangle.strokeColor = 'black';
+        }
+
+        function removeSmallBits(path) {
+            var averageLength = path.length / path.segments.length;
+            var min = path.length / 50;
+            for (var i = path.segments.length - 1; i >= 0; i--) {
+                var segment = path.segments[i];
+                var cur = segment.point;
+                var nextSegment = segment.next;
+                var next = nextSegment.point + nextSegment.handleIn;
+                if (cur.getDistance(next) < min) {
+                    segment.remove();
+                }
+            }
+        }
+	
+	function generateSeeds(seeds) {
+		var points = [];
+		var theta = 0.0;
+			
+		for(var i = 1; i < seeds; i++) {
+				
+			var d = Math.sqrt(i);
+			var x = d * Math.cos(theta * Math.PI / 180);
+			var y = d * Math.sin(theta * Math.PI / 180);				
+				
+			theta += angle;
+				
+			var point = new Point(x, y);
+			
+			// maybe these should have their own function
+			point *= seedScale;
+			point += size/2;
+			
+			
+			points.push(point);
+		}
+		
+		return points;
+	}
+        
+        function createPath(points, center) {
+            var path = new Path();
+            if (!selected) {
+                path.fillColor = spotColor;
+            } else {
+                path.fullySelected = selected;
+            }
+            path.closed = true;
+
+            for (var i = 0, l = points.length; i < l; i++) {
+                var point = points[i];
+                var next = points[(i + 1) == points.length ? 0 : i + 1];
+                var vector = (next - point) / 2;
+                path.add({
+                    point: point + vector,
+                    handleIn: -vector,
+                    handleOut: vector
+                });
+            }
+            path.scale(spacing);
+            removeSmallBits(path);
+            return path;
+        }
+	
+	// jquery slider controls
+	$( function() {
+    		$( "#seedcount" ).slider({
+			min: 19,
+			max: 1500,
+			step: 1,
+			range: "min",
+			value: seeds,
+			animate: false,
+			slide: setSeed,
+			change: setSeed
+		});
+		function setSeed() {
+			seeds = $( "#seedcount" ).slider( "value" );
+			if(seeds < 20) { seeds = 20; }
+			sites = generateSeeds(seeds);
+			renderDiagram();
+			$("#seedvalue").text(seeds);
+		}
+		$( "#scale" ).slider({
+			min: 4,
+			max: 100,
+			range: "min",
+			value: seedScale,
+			animate: false,
+			slide: setScale,
+			change: setScale
+		});
+		function setScale() {
+			seedScale = $( "#scale" ).slider( "value" );
+			if(seedScale < 5) { seedScale = 5; }
+			sites = generateSeeds(seeds);
+			renderDiagram();
+			$("#scalevalue").text(seedScale);
+		}
+		$( "#spacing" ).slider({
+			min: 0.1,
+			max: 0.99,
+			range: "min",
+			step: 0.01,
+			value: spacing,
+			animate: false,
+			slide: setSpacing,
+			change: setSpacing
+		});
+		function setSpacing() {
+			spacing = $( "#spacing" ).slider( "value" );
+			renderDiagram();
+			$("#spacingvalue").text(spacing);
+		}
+		$( "#spinner" ).spinner({
+      			step: 0.001,
+      			numberFormat: "n",
+			spin: setAngle,
+			change: setAngle
+    		});
+		function setAngle() {
+			angle = $( "#spinner" ).spinner( "value" );
+			sites = generateSeeds(seeds);
+			renderDiagram();
+
+		}	 	
+		$( ".famousangle" ).click(function() {
+  			angle = parseFloat($( this ).text());
+			$( "#spinner" ).spinner( "value", angle );
+			sites = generateSeeds(seeds);
+			renderDiagram();
+		});
+		$( "#spinner" ).spinner( "value", angle ); // only way to reset the spinner?
+		
+		function downloadDataUri(options) {
+			if (!options.url)
+				options.url = "http://download-data-uri.appspot.com/";
+			$('<form method="post" action="' + options.url
+				+ '" style="display:none"><input type="hidden" name="filename" value="'
+				+ options.filename + '"/><input type="hidden" name="data" value="'
+				+ options.data + '"/></form>').appendTo('body').submit().remove();
+		}
+
+		$('#export-button').click(function() {
+			var svg = project.exportSVG({ asString: true });
+			downloadDataUri({
+				data: 'data:image/svg+xml;base64,' + btoa(svg),
+				filename: 'export.svg'
+			});
+		});
+  	} );
+    </script>
+</head>
+<body>
+	<div class="controls">
+	    seeds<div id="seedcount"></div><span id="seedvalue">value</span>
+	    scale<div id="scale"></div><span id="scalevalue">value</span>
+	    spacing<div id="spacing"></div><span id="spacingvalue">value</span>
+  	    <div class="angle">
+		angle: <input id="spinner" name="spinner" value="222.49223595">
+		<div class="famousangle">222.49223595</div>
+		<div class="famousangle">254.558441227</div>
+		<div class="famousangle">114.591559026</div>
+		<div class="famousangle">132.436598822</div>
+		<div class="svgbutton"><input class="ui-button ui-widget ui-corner-all" type="button" value="Save as SVG" id="export-button"></div>	
+	    </div>
+	</div>
+
+	<canvas id="canvas" width="1000" height="1000"></canvas>
+</body>
+</html>
